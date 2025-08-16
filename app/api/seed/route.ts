@@ -1,18 +1,26 @@
-import { ensureSchema, isAddress } from "@/lib/db";
 import { sql } from "@vercel/postgres";
-import { promises as fs } from "node:fs";
-import path from "node:path";
+import { NextResponse } from "next/server";
+import { ensureSchema } from "@/lib/db";
 
 export async function POST() {
   await ensureSchema();
-  const file = path.join(process.cwd(), "seed", "addresses.txt");
-  const content = await fs.readFile(file, "utf8");
-  const lines = content.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const unique = Array.from(new Set(lines)).filter(isAddress);
-  for (let i=0; i<unique.length; i+=500) {
-    const slice = unique.slice(i, i+500);
-    const values = slice.map((a, idx) => `($${idx+1})`).join(",");
-    await sql.unsafe(`insert into wallets(address) values ${values} on conflict (address) do nothing`, slice);
+
+  try {
+    // reset schema
+    await sql`truncate table leaderboard_current;`;
+
+    // insert demo data
+    await sql`
+      insert into leaderboard_current (address, rank, total_points, account_level, twitter_handle, last_activity, delta_rank, delta_points)
+      values
+      ('0x123...', 1, 1000, 'gold', 'demo1', now(), 0, 0),
+      ('0x456...', 2, 800, 'silver', 'demo2', now(), -1, -50),
+      ('0x789...', 3, 500, 'bronze', 'demo3', now(), +1, +20);
+    `;
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
-  return Response.json({ inserted: unique.length });
 }

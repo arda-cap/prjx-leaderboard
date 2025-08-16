@@ -1,36 +1,28 @@
-import { ensureSchema, isAddress } from "@/lib/db";
 import { sql } from "@vercel/postgres";
-
-export const maxDuration = 60;
+import { NextResponse } from "next/server";
+import { ensureSchema } from "@/lib/db";
 
 export async function POST(req: Request) {
   await ensureSchema();
-  const ctype = req.headers.get("content-type") || "";
-  let content = "";
 
-  if (ctype.startsWith("text/plain")) {
-    content = await req.text();
-  } else if (ctype.startsWith("multipart/form-data")) {
-    const form = await req.formData();
-    const file = form.get("file") as File | null;
-    if (!file) return new Response("Missing file", { status: 400 });
-    content = await file.text();
-  } else if (ctype.startsWith("application/json")) {
-    const j = await req.json();
-    content = (j.addresses || []).join("\n");
-  } else {
-    return new Response("Unsupported content type", { status: 415 });
+  try {
+    const { addresses } = await req.json();
+
+    if (!Array.isArray(addresses)) {
+      return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    }
+
+    for (const addr of addresses) {
+      await sql`
+        insert into leaderboard_current (address, rank, total_points, account_level, last_activity)
+        values (${addr}, 9999, 0, 'unranked', now())
+        on conflict (address) do nothing;
+      `;
+    }
+
+    return NextResponse.json({ ok: true, count: addresses.length });
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
-
-  const lines = content.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-  const unique = Array.from(new Set(lines)).filter(isAddress);
-  if (unique.length === 0) return Response.json({ inserted: 0, duplicates: lines.length, total: lines.length });
-
-  for (let i=0; i<unique.length; i+=500) {
-    const slice = unique.slice(i, i+500);
-    const values = slice.map((a, idx) => `($${idx+1})`).join(",");
-    await sql.unsafe(`insert into wallets(address) values ${values} on conflict (address) do nothing`, slice);
-  }
-
-  return Response.json({ inserted: unique.length, duplicates: lines.length - unique.length, total: lines.length });
 }
