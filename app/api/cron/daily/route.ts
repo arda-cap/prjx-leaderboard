@@ -70,25 +70,23 @@ async function processOne(addr: string): Promise<ProcessResult> {
   `;
 
   // 4) compute deltas vs previous
-const prevRes = await sql<{ rank: number | null; total_points: number | null }[]>`
-  select rank, total_points
-  from leaderboard_current
-  where address = ${addr}
-`;
+  const prevRes = await sql<{ rank: number | null; total_points: number | null }>`
+    select rank, total_points
+    from leaderboard_current
+    where address = ${addr}
+  `;
+  const prev = (prevRes.rows[0] as { rank: number | null; total_points: number | null } | undefined) ?? null;
 
-// on récupère des valeurs safe (null si aucune ligne)
-const { rank: prevRank, total_points: prevPoints } =
-  (prevRes.rows?.[0] as { rank: number | null; total_points: number | null } | undefined) ??
-  { rank: null, total_points: null };
+  const prevRank = prev?.rank ?? null;
+  const prevPoints = prev?.total_points ?? null;
 
-const delta_rank =
-  prevRank != null && rank != null ? (prevRank as number) - (rank as number) : 0;
+  const delta_rank =
+    prevRank != null && rank != null ? (prevRank as number) - (rank as number) : 0;
 
-const delta_points =
-  prevPoints != null && totalPoints != null
-    ? Number(totalPoints) - Number(prevPoints)
-    : 0;
-
+  const delta_points =
+    prevPoints != null && totalPoints != null
+      ? Number(totalPoints) - Number(prevPoints)
+      : 0;
 
   // 5) upsert current row (all params must be primitives)
   await sql`
@@ -119,10 +117,9 @@ async function runJob(req: Request) {
   await ensureSchema();
 
   // read wallets list
-  const wallets = await sql<{ address: string }[]>`
+  const wallets = await sql<{ address: string }>`
     select address from wallets order by address asc
   `;
-  // typer explicitement les rows pour éviter l'implicit any
   const rows: { address: string }[] = wallets.rows;
   const addrs: string[] = rows.map(({ address }) => address);
 
