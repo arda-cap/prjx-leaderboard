@@ -12,7 +12,6 @@ export async function GET(request: Request) {
   const query = (searchParams.get("query") ?? "").trim();
   const offset = (page - 1) * pageSize;
 
-  // Branch without dynamic SQL helpers (keeps types happy)
   if (query) {
     const q = `%${query}%`;
 
