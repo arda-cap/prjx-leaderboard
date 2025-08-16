@@ -70,20 +70,25 @@ async function processOne(addr: string): Promise<ProcessResult> {
   `;
 
   // 4) compute deltas vs previous
-  const prevRes = await sql<{ rank: number | null; total_points: number | null }[]>`
-    select rank, total_points
-    from leaderboard_current
-    where address = ${addr}
-  `;
-  const prev = prevRes.rows?.[0];
+const prevRes = await sql<{ rank: number | null; total_points: number | null }[]>`
+  select rank, total_points
+  from leaderboard_current
+  where address = ${addr}
+`;
 
-  const delta_rank =
-    prev?.rank != null && rank != null ? (prev.rank as number) - (rank as number) : 0;
+// on récupère des valeurs safe (null si aucune ligne)
+const { rank: prevRank, total_points: prevPoints } =
+  (prevRes.rows?.[0] as { rank: number | null; total_points: number | null } | undefined) ??
+  { rank: null, total_points: null };
 
-  const delta_points =
-    prev?.total_points != null && totalPoints != null
-      ? Number(totalPoints) - Number(prev.total_points)
-      : 0;
+const delta_rank =
+  prevRank != null && rank != null ? (prevRank as number) - (rank as number) : 0;
+
+const delta_points =
+  prevPoints != null && totalPoints != null
+    ? Number(totalPoints) - Number(prevPoints)
+    : 0;
+
 
   // 5) upsert current row (all params must be primitives)
   await sql`
